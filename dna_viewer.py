@@ -23,7 +23,7 @@ st.title("FASTQ/FASTA & NCBI Sequence Viewer")
 # -------------------------
 # Upload FASTQ Section
 # -------------------------
-uploaded_file = st.file_uploader("Upload a FASTQ file", type=["fastq", "fq", "gz",'fasta'])
+uploaded_file = st.file_uploader("Upload a FASTQ file")
 
 def analyze_record(record):
     with st.expander(f"Read {record.id}", expanded=True):
@@ -61,6 +61,44 @@ if uploaded_file is not None:
             for i, record in enumerate(SeqIO.parse(text_stream, "fasta")):
                 analyze_record(record)
                 if i >= 50: break
+# -------------------------
+# Alignment Scoring Section
+# -------------------------
+st.markdown("##  Upload Pre-Aligned FASTA File for Alignment Scoring")
+aligned_file = st.file_uploader("Upload Pre-Aligned FASTA File (must include 'Consensus60')", key="aligned")
+
+if aligned_file is not None:
+    st.success(f"Uploaded alignment file: {aligned_file.name}")
+    aligned_stream = io.TextIOWrapper(aligned_file, encoding='utf-8')
+    
+    sequences = {}
+    try:
+        for record in SeqIO.parse(aligned_stream, "fasta"):
+            sequences[record.id] = record.seq
+    except Exception as e:
+        st.error(f"Error parsing FASTA file: {e}")
+        sequences = {}
+
+    if "Consensus60" in sequences:
+        def score_calculator(sequences):
+            score = {}
+            reference = sequences["Consensus60"]
+            for name, seq in sequences.items():
+                if name == "Consensus60":
+                    continue
+                penalty = sum(1 for a, b in zip(seq, reference) if a != b)
+                match_score = 100 * ((len(seq) - penalty) / len(seq))
+                score[name] = match_score
+            return score
+
+        st.markdown("### 🧮 Alignment Score Results")
+        st.write("**Reference:** Consensus60")
+
+        scores = score_calculator(sequences)
+        score_df = pd.DataFrame(scores.items(), columns=["Sequence ID", "Alignment Score (%)"])
+        st.dataframe(score_df.sort_values(by="Alignment Score (%)", ascending=False), use_container_width=True)
+    else:
+        st.warning("The uploaded FASTA file does not contain a sequence with ID 'Consensus60'.")
 
 # -------------------------
 # NCBI Gene URL Search
